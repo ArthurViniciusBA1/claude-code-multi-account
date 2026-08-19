@@ -11,6 +11,13 @@ claude() {
         return $?
     fi
 
+    # Se o binário real do claude não existe ainda, pergunta (com "Sim"
+    # pré-selecionado) antes de instalar via npm — nunca instala sem
+    # confirmação. Sem terminal interativo, só avisa e sai.
+    if ! command -v claude >/dev/null 2>&1; then
+        claude-switcher-core ensure-claude-code || return 1
+    fi
+
     local interactive=0
     case $- in
         *i*) interactive=1 ;;

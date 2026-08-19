@@ -24,13 +24,26 @@ function Get-RealClaudePath {
 }
 
 function claude {
+    $core = Get-Command claude-switcher-core -ErrorAction SilentlyContinue
+
     $realClaude = Get-RealClaudePath
     if (-not $realClaude) {
-        Write-Error "claude: binário real do Claude Code não encontrado no PATH."
-        return
+        if ($core) {
+            # Pergunta (com "Sim" pré-selecionado) antes de instalar via
+            # npm — nunca instala sem confirmação.
+            & claude-switcher-core ensure-claude-code
+            if ($LASTEXITCODE -ne 0) {
+                return
+            }
+            $script:ClaudeSwitcherRealClaude = $null
+            $realClaude = Get-RealClaudePath
+        }
+        if (-not $realClaude) {
+            Write-Error "claude: binário real do Claude Code não encontrado no PATH."
+            return
+        }
     }
 
-    $core = Get-Command claude-switcher-core -ErrorAction SilentlyContinue
     if (-not $core) {
         & $realClaude @args
         return

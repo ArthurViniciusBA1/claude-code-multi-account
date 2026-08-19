@@ -6,6 +6,14 @@ function claude --description "Escolhe qual conta/instância do Claude usar ante
         return $status
     end
 
+    # Se o binário real do claude não existe ainda, pergunta (com "Sim"
+    # pré-selecionado) antes de instalar via npm — nunca instala sem
+    # confirmação. Sem terminal interativo, só avisa e sai.
+    if not command -v claude &>/dev/null
+        claude-switcher-core ensure-claude-code
+        or return 1
+    end
+
     # CLAUDE_PROFILE=<chave> deve funcionar mesmo em scripts não-interativos;
     # fora isso, sem terminal interativo nunca abrimos seletor.
     if not set -q CLAUDE_PROFILE; and not status is-interactive
