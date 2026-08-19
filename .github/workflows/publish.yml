@@ -1,0 +1,53 @@
+name: Publish to npm
+
+# Roda quando uma tag "v*.*.*" é empurrada (ex: v1.0.1). O fluxo pra
+# lançar uma versão nova:
+#   1. Edite "version" em package.json
+#   2. git commit -am "vX.Y.Z"
+#   3. git tag vX.Y.Z && git push && git push --tags
+#
+# Usa Trusted Publishing (OIDC) — sem token armazenado como secret. É
+# preciso configurar esse workflow como "trusted publisher" do pacote
+# claude-switcher-core nas configurações do npm (npmjs.com).
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write   # necessário pro OIDC do Trusted Publishing (sem token armazenado)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Garantir npm recente (Trusted Publishing exige uma versão nova do npm)
+        run: npm install -g npm@latest
+
+      - name: Checar sintaxe
+        run: |
+          node -c bin/core.js
+          node -c lib/shell-integration.js
+          node -c scripts/postinstall.js
+          node -c scripts/preuninstall.js
+          node -e "JSON.parse(require('fs').readFileSync('package.json'))"
+
+      - name: Conferir que a tag bate com a versão do package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME não bate com a versão do package.json ($PKG_VERSION)."
+            exit 1
+          fi
+
+      - run: npm publish --provenance
