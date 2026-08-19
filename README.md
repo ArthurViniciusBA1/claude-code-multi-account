@@ -220,6 +220,11 @@ CLAUDE_PROFILE=work claude   # pula o seletor, usa o perfil "work" direto
 - Em sessões não-interativas (scripts, hooks): sempre passa direto pro
   `claude` real, nunca abre o seletor — exceto `CLAUDE_PROFILE=<chave>`, que
   funciona mesmo fora de um terminal interativo.
+- Com 2+ perfis, o seletor também avisa quando há uma atualização
+  disponível (`↑ Atualização disponível — rode "claude-profile update"`).
+  Essa checagem usa um cache de até 24h e roda em segundo plano — nunca
+  deixa o `claude` mais lento esperando rede. Só funciona se a instalação
+  tiver um clone git associado (o normal via `install.sh`/`install.ps1`).
 
 ## Gerenciando perfis
 

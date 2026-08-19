@@ -4,11 +4,13 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, spawn } = require('node:child_process');
 const readline = require('node:readline/promises');
 
 const ROOT = path.join(os.homedir(), '.claude-accounts');
 const PROFILES_FILE = path.join(ROOT, 'profiles.json');
+const UPDATE_CACHE_FILE = path.join(ROOT, '.update-check.json');
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
 const DEFAULT_EMOJI = '👤';
 const REPO_URL = 'https://github.com/ArthurViniciusBA1/claude-code-multi-account.git';
 
@@ -75,6 +77,58 @@ function uniqueKey(baseSlug, profiles) {
 function hasFzf() {
     const res = spawnSync('fzf', ['--version'], { stdio: 'ignore' });
     return !res.error && res.status === 0;
+}
+
+// checkForUpdateNotice: lê o cache de "tem atualização?" (escrito pela
+// checagem em background) e, se estiver velho ou não existir, dispara uma
+// checagem nova em background — sem esperar por ela, pra nunca deixar
+// "claude" mais lento por causa disso. Usa sempre o que já tem no cache
+// (mesmo que esteja prestes a ficar velho) pra decidir se avisa AGORA;
+// a atualização do cache só vale pra próxima vez.
+function checkForUpdateNotice() {
+    let cache = null;
+    try {
+        cache = JSON.parse(fs.readFileSync(UPDATE_CACHE_FILE, 'utf8'));
+    } catch (_) {
+        cache = null;
+    }
+
+    const stale = !cache || (Date.now() - cache.lastChecked) > UPDATE_CHECK_INTERVAL_MS;
+    if (stale) {
+        try {
+            const child = spawn(process.execPath, [__filename, '__background-update-check'], {
+                detached: true,
+                stdio: 'ignore',
+            });
+            child.unref();
+        } catch (_) {
+            // sem problema, só não atualiza o cache dessa vez
+        }
+    }
+
+    return Boolean(cache && cache.updateAvailable);
+}
+
+// cmdBackgroundUpdateCheck: subcomando interno, chamado apenas pelo
+// spawn desacoplado acima. Só checa se já existe um clone git associado
+// à instalação atual (não clona nada sozinho — isso só acontece via
+// "claude-profile update", nunca em segundo plano sem o usuário pedir).
+async function cmdBackgroundUpdateCheck() {
+    const repoRoot = findRepoRoot();
+    if (!repoRoot) return;
+
+    const status = checkForUpdate(repoRoot);
+    const cache = {
+        lastChecked: Date.now(),
+        updateAvailable: Boolean(status && !status.upToDate),
+        log: status && !status.upToDate ? status.log : '',
+    };
+    try {
+        fs.mkdirSync(ROOT, { recursive: true });
+        fs.writeFileSync(UPDATE_CACHE_FILE, JSON.stringify(cache));
+    } catch (_) {
+        // é só cache, se falhar tudo bem
+    }
 }
 
 // askYesNo: mesmo seletor com navegação por teclado do "select" de perfil
@@ -152,6 +206,10 @@ async function cmdSelect() {
     if (profiles.length === 1) {
         process.stdout.write(accountDir(profiles[0].key));
         process.exit(0);
+    }
+
+    if (checkForUpdateNotice()) {
+        console.error(DIM + '↑ Atualização disponível — rode "claude-profile update"' + RESET);
     }
 
     let chosenKey = null;
@@ -581,6 +639,9 @@ async function main() {
             break;
         case 'update':
             await cmdUpdate();
+            break;
+        case '__background-update-check':
+            await cmdBackgroundUpdateCheck();
             break;
         default:
             console.error('uso: claude-profile add [nome] [emoji]');
