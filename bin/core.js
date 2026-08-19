@@ -436,15 +436,26 @@ function findRepoRoot() {
     return null;
 }
 
+// npmInstallLocal: se ~/.npm-global já existe (de uma instalação anterior
+// que caiu nesse fallback), usa ele direto — sem tentar de novo o prefixo
+// global padrão primeiro só pra falhar com EACCES toda vez (isso deixava
+// "claude-profile update" cuspindo um erro assustador do npm a cada
+// execução, mesmo funcionando). Só tenta o prefixo padrão primeiro quando
+// ainda não existe indício de qual prefixo usar.
 function npmInstallLocal(target) {
+    const userPrefix = path.join(os.homedir(), '.npm-global');
+
+    if (fs.existsSync(userPrefix)) {
+        const res = spawnSync('npm', ['install', '-g', '--prefix', userPrefix, target], { stdio: 'inherit' });
+        return res.status === 0;
+    }
+
     const res = spawnSync('npm', ['install', '-g', target], { stdio: 'inherit' });
     if (res.status === 0) return true;
-    const userPrefix = path.join(os.homedir(), '.npm-global');
-    if (fs.existsSync(userPrefix)) {
-        const res2 = spawnSync('npm', ['install', '-g', '--prefix', userPrefix, target], { stdio: 'inherit' });
-        return res2.status === 0;
-    }
-    return false;
+
+    fs.mkdirSync(userPrefix, { recursive: true });
+    const res2 = spawnSync('npm', ['install', '-g', '--prefix', userPrefix, target], { stdio: 'inherit' });
+    return res2.status === 0;
 }
 
 // checkForUpdate: dá um "git fetch" (não mexe na árvore de trabalho) e
