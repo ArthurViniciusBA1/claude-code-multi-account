@@ -42,6 +42,45 @@ function hasFzf() {
     return !res.error && res.status === 0;
 }
 
+// askYesNo: mesmo seletor com navegação por teclado do "select" de perfil
+// (fzf, com fallback numerado quando não tem fzf) só que pra perguntas
+// sim/não — em vez de digitar "s"/"n" e apertar Enter. A opção padrão
+// (a que apareceria maiúscula em "[Y/n]"/"[s/N]") fica pré-selecionada.
+// Retorna 'yes', 'no' ou 'cancelled' (Esc/Ctrl+C/EOF durante a seleção —
+// cada chamador decide se isso deve imprimir alguma mensagem própria).
+async function askYesNo(question, defaultYes) {
+    const options = defaultYes ? ['Sim', 'Não'] : ['Não', 'Sim'];
+
+    if (hasFzf()) {
+        console.log(question);
+        const res = spawnSync(
+            'fzf',
+            ['--height=~40%', '--layout=reverse', '--border', '--no-input',
+                '--padding=1,2', '--margin=1,2', '--pointer=➤', '--no-multi'],
+            { input: options.join('\n'), encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'] }
+        );
+        const pick = (res.stdout || '').trim();
+        if (pick === 'Sim') return 'yes';
+        if (pick === 'Não') return 'no';
+        return 'cancelled';
+    }
+
+    console.log(question);
+    options.forEach((o, i) => console.log(`  ${i + 1}) ${o}`));
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    let answer;
+    try {
+        answer = (await rl.question('> ')).trim();
+    } catch (_) {
+        rl.close();
+        return 'cancelled';
+    }
+    rl.close();
+    const idx = parseInt(answer, 10);
+    if (Number.isNaN(idx) || idx < 1 || idx > options.length) return 'cancelled';
+    return options[idx - 1] === 'Sim' ? 'yes' : 'no';
+}
+
 function formatList(profiles) {
     if (profiles.length === 0) {
         return "Nenhum perfil configurado. Use: claude-profile add <chave> [emoji] [rótulo]";
@@ -148,11 +187,8 @@ async function promptAuth(dir) {
         console.log(`Autentique quando quiser com:  CLAUDE_CONFIG_DIR=${dir} claude`);
         return;
     }
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const answer = (await rl.question('Autenticar essa conta agora (abre o claude)? [Y/n] ')).trim().toLowerCase();
-    rl.close();
-    const yes = answer === '' || answer === 'y' || answer === 'yes' || answer === 's' || answer === 'sim';
-    if (yes) {
+    const answer = await askYesNo('Autenticar essa conta agora (abre o claude)?', true);
+    if (answer === 'yes') {
         spawnSync('claude', [], {
             stdio: 'inherit',
             env: { ...process.env, CLAUDE_CONFIG_DIR: dir },
@@ -221,10 +257,13 @@ async function cmdAdd(argv) {
         console.log(`  config_dir: ${accountDir(key)}`);
         console.log('');
 
-        const confirm = (await rl.question('Confirmar? [Y/n] ')).trim().toLowerCase();
-        rl.close();
-        const yes = confirm === '' || confirm === 'y' || confirm === 'yes' || confirm === 's' || confirm === 'sim';
-        if (!yes) {
+        rl.close(); // fecha antes de askYesNo, que abre sua própria interface se precisar
+
+        const confirm = await askYesNo('Confirmar?', true);
+        if (confirm === 'cancelled') {
+            process.exit(1); // Ctrl+C/Esc: sai calado, sem "Cancelado."
+        }
+        if (confirm === 'no') {
             console.log('Cancelado.');
             process.exit(1);
         }
@@ -323,23 +362,20 @@ async function cmdUninstall() {
     console.log('');
 
     if (process.stdin.isTTY) {
-        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-        const wipeAccounts = (await rl.question(
-            'Apagar também as contas salvas em ~/.claude-accounts (login, histórico, credenciais)? [s/N] '
-        )).trim().toLowerCase();
-        if (wipeAccounts === 's' || wipeAccounts === 'sim' || wipeAccounts === 'y' || wipeAccounts === 'yes') {
+        const wipeAccounts = await askYesNo(
+            'Apagar também as contas salvas em ~/.claude-accounts (login, histórico, credenciais)?', false
+        );
+        if (wipeAccounts === 'yes') {
             fs.rmSync(ROOT, { recursive: true, force: true });
             console.log('~/.claude-accounts removido.');
         } else {
             console.log('~/.claude-accounts mantido.');
         }
 
-        const wipeClaude = (await rl.question(
-            'Desinstalar também o Claude Code (@anthropic-ai/claude-code)? [s/N] '
-        )).trim().toLowerCase();
-        rl.close();
-        if (wipeClaude === 's' || wipeClaude === 'sim' || wipeClaude === 'y' || wipeClaude === 'yes') {
+        const wipeClaude = await askYesNo(
+            'Desinstalar também o Claude Code (@anthropic-ai/claude-code)?', false
+        );
+        if (wipeClaude === 'yes') {
             npmUninstall('@anthropic-ai/claude-code');
             console.log('Claude Code desinstalado.');
         } else {
@@ -445,11 +481,8 @@ async function cmdUpdate() {
         console.log('');
 
         if (process.stdin.isTTY) {
-            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-            const answer = (await rl.question('Atualizar agora? [S/n] ')).trim().toLowerCase();
-            rl.close();
-            const yes = answer === '' || answer === 's' || answer === 'sim' || answer === 'y' || answer === 'yes';
-            if (!yes) {
+            const answer = await askYesNo('Atualizar agora?', true);
+            if (answer !== 'yes') {
                 console.log('Mantendo a versão atual.');
                 return;
             }

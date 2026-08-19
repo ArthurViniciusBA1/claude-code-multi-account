@@ -155,10 +155,19 @@ Resumo:
   emoji:      💼
   config_dir: ~/.claude-accounts/work
 
-Confirmar? [Y/n]
+Confirmar?
+  ➤ Sim
+    Não
 Perfil 'work' adicionado (~/.claude-accounts/work).
-Autenticar essa conta agora (abre o claude)? [Y/n]
+Autenticar essa conta agora (abre o claude)?
+  ➤ Sim
+    Não
 ```
+
+As perguntas sim/não usam o mesmo seletor com navegação por teclado do
+seletor de conta (setas + Enter, via `fzf`, com fallback numerado — `1)
+Sim  2) Não` — quando `fzf` não está disponível). A opção que era
+maiúscula no `[Y/n]`/`[s/N]` de antes fica pré-selecionada.
 
 Repita pra cada conta que quiser adicionar. Com 2+ perfis configurados,
 `claude` passa a abrir o seletor antes de rodar o Claude Code de verdade.
@@ -208,8 +217,8 @@ claude-profile uninstall
 (`rm -rf ~/.claude-accounts/<chave>`).
 
 `update` checa se há uma versão mais nova (via `git fetch`, sem mexer em
-nada ainda), mostra os commits novos e pergunta `[S/n]` antes de puxar e
-reinstalar — nunca atualiza silenciosamente. Sem precisar rodar
+nada ainda), mostra os commits novos e pergunta (com "Sim" pré-selecionado)
+antes de puxar e reinstalar — nunca atualiza silenciosamente. Sem precisar rodar
 `git clone`/`git pull` na mão: ele acha sozinho onde está o clone original
 (`npm install -g <path-local>` normalmente deixa um symlink de volta pra
 ele); se não achar nenhum clone associado à instalação atual, clona um novo
@@ -252,8 +261,8 @@ claude-profile uninstall
 Remove o pacote do npm e a integração de todos os shells (fish, bash, zsh e
 PowerShell — detecta e limpa o que encontrar, independente de qual você
 está usando agora). Por padrão **não apaga suas contas** salvas em
-`~/.claude-accounts` nem desinstala o Claude Code em si — pergunta `[s/N]`
-separadamente pra cada um desses dois, sempre com padrão "não".
+`~/.claude-accounts` nem desinstala o Claude Code em si — pergunta
+separadamente pra cada um desses dois (com "Não" pré-selecionado).
 
 Alternativa, se preferir rodar a partir do clone do repositório:
 
