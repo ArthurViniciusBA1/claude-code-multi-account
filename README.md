@@ -17,80 +17,87 @@ você nunca precisa escolher ou digitar um path.
 
 ## Instalação
 
-**1. Instale o núcleo** (requer Node.js — se você já roda o Claude Code,
-já tem Node instalado):
+**Linux/macOS (fish, bash, zsh) — um passo só:**
 
 ```sh
-npm install -g git+https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
+git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
+cd claude-code-multi-account
+./install.sh
 ```
 
-Se `/usr` (ou o prefixo global padrão do seu `npm`) não for gravável sem
-`sudo`, configure um prefixo de usuário uma vez, sem precisar de privilégio
-elevado:
+`install.sh` detecta sozinho quais shells você tem instalados (fish, bash
+e/ou zsh — pode ser mais de um) e já configura o wrapper certo pra cada um,
+sem precisar copiar arquivo nem escolher nada na mão. Também instala o
+núcleo a partir do próprio clone (sem depender do npm buscar via git, então
+não esbarra em travas de segurança tipo `allow-git=none`), e cai sozinho
+num prefixo de usuário (`~/.npm-global`) se o prefixo global do npm não for
+gravável sem `sudo`. Rodar de novo não duplica nada — é seguro repetir.
+
+**Windows (PowerShell) — um passo só:**
+
+```powershell
+git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
+cd claude-code-multi-account
+.\install.ps1
+```
+
+> O wrapper e o instalador do PowerShell foram escritos e revisados com
+> cuidado (inclusive o detalhe de resolver o binário real do `claude` via
+> `Get-Command -CommandType Application` pra evitar recursão infinita, já
+> que o PowerShell não tem um `command`/`command` como fish/bash), mas
+> **ainda não foram testados num Windows/PowerShell de verdade** — valide
+> num ambiente real antes de distribuir pro time.
+
+Depois de instalar (qualquer shell), abra um terminal novo e rode
+`claude-profile add` pra cadastrar sua primeira conta.
+
+<details>
+<summary>Instalação manual / passo a passo por shell (se preferir não rodar o script)</summary>
+
+**Núcleo** (necessário em todos os casos):
+
+```sh
+npm install -g /caminho/do/clone/claude-code-multi-account
+```
+
+Se o prefixo global do seu `npm` não for gravável sem `sudo`:
 
 ```sh
 mkdir -p ~/.npm-global
-npm install -g --prefix ~/.npm-global git+https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
+npm install -g --prefix ~/.npm-global /caminho/do/clone/claude-code-multi-account
 ```
 
 E adicione `~/.npm-global/bin` ao seu `PATH` (fish: `fish_add_path ~/.npm-global/bin`
 no `config.fish`; bash/zsh: `export PATH="$HOME/.npm-global/bin:$PATH"` no
 `.bashrc`/`.zshrc`).
 
-**2. Instale o wrapper do seu shell:**
-
-<details>
-<summary><b>fish</b></summary>
-
-Com [Fisher](https://github.com/jorgebucaran/fisher):
+**fish** — com [Fisher](https://github.com/jorgebucaran/fisher):
 
 ```fish
 fisher install ArthurViniciusBA1/claude-code-multi-account
 ```
 
-Sem Fisher (manual):
+Ou manual:
 
 ```fish
 cp functions/*.fish ~/.config/fish/functions/
 cp conf.d/*.fish ~/.config/fish/conf.d/
 ```
 
-Requer [fzf](https://github.com/junegunn/fzf) pro seletor visual — sem ele,
-cai automaticamente num menu numerado simples.
-
-</details>
-
-<details>
-<summary><b>bash / zsh</b></summary>
-
-Clone o repositório em algum lugar estável e adicione ao seu `~/.bashrc` ou
-`~/.zshrc`:
+**bash / zsh** — adicione ao `~/.bashrc` ou `~/.zshrc`:
 
 ```sh
-git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git ~/.claude-code-multi-account
-echo 'source ~/.claude-code-multi-account/shell/claude-switcher.sh' >> ~/.bashrc   # ou ~/.zshrc
+source /caminho/do/clone/claude-code-multi-account/shell/claude-switcher.sh
 ```
 
-Também usa `fzf` se disponível, com fallback pro menu numerado.
-
-</details>
-
-<details>
-<summary><b>PowerShell (Windows/macOS/Linux)</b></summary>
-
-Clone o repositório em algum lugar estável e adicione ao seu `$PROFILE`:
+**PowerShell** — adicione ao `$PROFILE`:
 
 ```powershell
-git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git $HOME\claude-code-multi-account
-Add-Content $PROFILE '. "$HOME\claude-code-multi-account\powershell\claude-switcher.ps1"'
+. "C:\caminho\do\clone\claude-code-multi-account\powershell\claude-switcher.ps1"
 ```
 
-> O wrapper PowerShell foi escrito e revisado com cuidado (inclusive o
-> detalhe de resolver o binário real do `claude` via
-> `Get-Command -CommandType Application` pra evitar recursão infinita, já
-> que o PowerShell não tem um `command`/`command` como fish/bash), mas
-> **ainda não foi testado num Windows/PowerShell de verdade** — valide
-> num ambiente real antes de distribuir pro time.
+Todos os shells usam `fzf` se disponível pro seletor visual, com fallback
+pra um menu numerado simples.
 
 </details>
 
