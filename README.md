@@ -17,21 +17,63 @@ você nunca precisa escolher ou digitar um path.
 
 ## Instalação
 
-**Linux/macOS (fish, bash, zsh) — um passo só:**
+**Linux/macOS (fish, bash, zsh) — um comando:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ArthurViniciusBA1/claude-code-multi-account/main/remote-install.sh | sh
+```
+
+**Windows (PowerShell) — um comando:**
+
+```powershell
+irm https://raw.githubusercontent.com/ArthurViniciusBA1/claude-code-multi-account/main/remote-install.ps1 | iex
+```
+
+Cada comando clona o repositório em `~/.claude-code-multi-account` (ou
+atualiza, se já existir) e delega pro `install.sh`/`install.ps1` de lá —
+mesma lógica de sempre, só sem precisar clonar/rodar na mão. As perguntas
+interativas (Claude Code instalado? etc.) continuam funcionando
+normalmente mesmo dentro do `curl | sh` — o script reabre o terminal de
+verdade pra elas. No PowerShell, `irm | iex` já roda no escopo da sessão
+atual (diferente de chamar um arquivo `.ps1` direto), então o comando
+`claude` fica disponível na hora, sem precisar abrir nada novo.
+
+> O wrapper e os instaladores do PowerShell foram escritos e revisados com
+> cuidado (inclusive o detalhe de resolver o binário real do `claude` via
+> `Get-Command -CommandType Application` pra evitar recursão infinita, já
+> que o PowerShell não tem um `command`/`command` como fish/bash), mas
+> **ainda não foram testados num Windows/PowerShell de verdade** — valide
+> num ambiente real antes de distribuir pro time.
+
+Depois de instalar com o comando de um passo só, rode `claude-profile add`
+pra cadastrar sua primeira conta — no fish/bash/zsh, se o script te
+mostrou o aviso de "abra um terminal novo" é só porque o wrapper daquele
+shell específico ainda não estava carregado nesta sessão; no PowerShell,
+já funciona na hora.
+
+<details>
+<summary>Clonar manualmente em vez do comando de um passo só</summary>
 
 ```sh
 git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
 cd claude-code-multi-account
-./install.sh
+./install.sh          # Linux/macOS
+. .\install.ps1        # Windows — repare no ". " antes do caminho
 ```
 
-`install.sh` detecta sozinho quais shells você tem instalados (fish, bash
-e/ou zsh — pode ser mais de um) e já configura o wrapper certo pra cada um,
-sem precisar copiar arquivo nem escolher nada na mão. Também instala o
-núcleo a partir do próprio clone (sem depender do npm buscar via git, então
-não esbarra em travas de segurança tipo `allow-git=none`), e cai sozinho
-num prefixo de usuário (`~/.npm-global`) se o prefixo global do npm não for
-gravável sem `sudo`. Rodar de novo não duplica nada — é seguro repetir.
+`install.sh`/`install.ps1` detectam sozinhos quais shells você tem
+instalados (fish, bash e/ou zsh — pode ser mais de um) e já configuram o
+wrapper certo pra cada um, sem precisar copiar arquivo nem escolher nada
+na mão. Também instalam o núcleo a partir do próprio clone (sem depender
+do npm buscar via git, então não esbarram em travas de segurança tipo
+`allow-git=none`), e caem sozinhos num prefixo de usuário
+(`~/.npm-global`) se o prefixo global do npm não for gravável sem `sudo`.
+Rodar de novo não duplica nada — é seguro repetir.
+
+No PowerShell, o `. ` antes do caminho roda o script "dot-sourced", o que
+carrega o comando `claude` direto nessa mesma sessão (sem precisar abrir
+um terminal novo depois). Rodar só `.\install.ps1`, sem o ponto, também
+funciona, mas aí você precisa abrir uma sessão nova pra usar o `claude`.
 
 Se o Claude Code (comando `claude`) ainda não estiver instalado, o script
 pergunta (S/N) antes de instalar via `npm install -g @anthropic-ai/claude-code`
@@ -40,31 +82,10 @@ rodando `claude --version` (o pacote tem um postinstall que baixa o binário
 nativo da plataforma; se isso falhar silenciosamente, o script avisa em vez
 de fingir que deu certo).
 
-**Windows (PowerShell) — um passo só:**
-
-```powershell
-git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
-cd claude-code-multi-account
-. .\install.ps1
-```
-
-Repare no `. ` antes do caminho — isso roda o script "dot-sourced", o que
-carrega o comando `claude` direto nessa mesma sessão (sem precisar abrir um
-terminal novo depois). Rodar só `.\install.ps1`, sem o ponto, também
-funciona, mas aí você precisa abrir uma sessão nova pra usar o `claude`.
-
-> O wrapper e o instalador do PowerShell foram escritos e revisados com
-> cuidado (inclusive o detalhe de resolver o binário real do `claude` via
-> `Get-Command -CommandType Application` pra evitar recursão infinita, já
-> que o PowerShell não tem um `command`/`command` como fish/bash), mas
-> **ainda não foram testados num Windows/PowerShell de verdade** — valide
-> num ambiente real antes de distribuir pro time.
-
-Depois de instalar (qualquer shell), abra um terminal novo e rode
-`claude-profile add` pra cadastrar sua primeira conta.
+</details>
 
 <details>
-<summary>Instalação manual / passo a passo por shell (se preferir não rodar o script)</summary>
+<summary>Instalação manual / passo a passo por shell (sem rodar nenhum script)</summary>
 
 **Núcleo** (necessário em todos os casos):
 
