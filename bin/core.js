@@ -374,11 +374,10 @@ async function main() {
             await cmdUninstall();
             break;
         default:
-            console.error('uso: claude-switcher-core select');
-            console.error('     claude-switcher-core add [chave] [emoji] [rótulo]');
-            console.error('     claude-switcher-core list');
-            console.error('     claude-switcher-core remove <chave>');
-            console.error('     claude-switcher-core uninstall');
+            console.error('uso: claude-profile add [chave] [emoji] [rótulo]');
+            console.error('     claude-profile list');
+            console.error('     claude-profile remove <chave>');
+            console.error('     claude-profile uninstall');
             process.exit(1);
     }
 }
