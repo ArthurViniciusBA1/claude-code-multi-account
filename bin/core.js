@@ -9,7 +9,6 @@ const readline = require('node:readline/promises');
 
 const ROOT = path.join(os.homedir(), '.claude-accounts');
 const PROFILES_FILE = path.join(ROOT, 'profiles.json');
-const KEY_RE = /^[a-zA-Z0-9_-]+$/;
 const DEFAULT_EMOJI = '👤';
 const REPO_URL = 'https://github.com/ArthurViniciusBA1/claude-code-multi-account.git';
 
@@ -48,6 +47,29 @@ function accountDir(key) {
 
 function findProfile(profiles, key) {
     return profiles.find((p) => p.key === key);
+}
+
+// slugify: transforma um nome livre (acentos, espaços, emoji, o que for)
+// numa chave segura pra usar como nome de pasta e em
+// "CLAUDE_PROFILE=<chave> claude". Minúsculas, sem acento, só
+// [a-z0-9-]. Cai pra "conta" se não sobrar nada usável (ex: nome só com
+// emoji/símbolos).
+function slugify(name) {
+    const slug = name
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return slug || 'conta';
+}
+
+// uniqueKey: se a chave derivada já existe, sufixa com -2, -3... até achar
+// uma livre — nunca pede confirmação nem bloqueia o fluxo por causa disso.
+function uniqueKey(baseSlug, profiles) {
+    if (!findProfile(profiles, baseSlug)) return baseSlug;
+    let i = 2;
+    while (findProfile(profiles, `${baseSlug}-${i}`)) i++;
+    return `${baseSlug}-${i}`;
 }
 
 function hasFzf() {
@@ -96,7 +118,7 @@ async function askYesNo(question, defaultYes) {
 
 function formatList(profiles) {
     if (profiles.length === 0) {
-        return "Nenhum perfil configurado. Use: claude-profile add <chave> [emoji] [rótulo]";
+        return "Nenhum perfil configurado. Use: claude-profile add <nome> [emoji]";
     }
     return profiles
         .map((p) => `${p.emoji}  ${p.key}  (${p.label})  ->  ${accountDir(p.key)}`)
@@ -212,23 +234,19 @@ async function cmdAdd(argv) {
     let key, emoji, label;
 
     if (argv.length >= 1) {
-        // Modo direto (scriptável): claude-profile add <chave> [emoji] [rótulo]
-        key = argv[0];
+        // Modo direto (scriptável): claude-profile add <nome> [emoji]
+        label = argv[0];
         emoji = argv[1] || DEFAULT_EMOJI;
-        label = argv.length >= 3 ? argv.slice(2).join(' ') : key;
 
-        if (!KEY_RE.test(key)) {
-            console.error("claude-profile: chave inválida (use só letras, números, '-' ou '_').");
-            process.exit(1);
-        }
-        if (findProfile(profiles, key)) {
-            console.error(`claude-profile: perfil '${key}' já existe. Use 'claude-profile remove ${key}' antes de recriar.`);
-            process.exit(1);
+        const baseSlug = slugify(label);
+        key = uniqueKey(baseSlug, profiles);
+        if (key !== baseSlug) {
+            console.log(`Já existe um perfil com a chave "${baseSlug}" — usando "${key}".`);
         }
     } else {
         // Modo wizard interativo.
         if (!process.stdin.isTTY) {
-            console.error('uso: claude-profile add <chave> [emoji] [rótulo]');
+            console.error('uso: claude-profile add [nome] [emoji]');
             process.exit(1);
         }
 
@@ -241,45 +259,39 @@ async function cmdAdd(argv) {
 
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
-        console.log(BOLD + 'Chave' + RESET);
-        console.log(DIM + '  Identificador curto. Vira o nome da pasta em ~/.claude-accounts/<chave>' + RESET);
-        console.log(DIM + '  e funciona com "CLAUDE_PROFILE=<chave> claude" pra pular o seletor' + RESET);
-        console.log(DIM + '  direto pra essa conta.' + RESET);
+        console.log(BOLD + 'Nome' + RESET);
+        console.log(DIM + '  Como você quer chamar essa conta (ex: Trabalho). Vira o nome mostrado' + RESET);
+        console.log(DIM + '  no seletor, e também dá origem à chave interna — o nome da pasta em' + RESET);
+        console.log(DIM + '  ~/.claude-accounts/<chave>, usada com "CLAUDE_PROFILE=<chave> claude"' + RESET);
+        console.log(DIM + '  pra pular o seletor direto pra essa conta.' + RESET);
         while (true) {
-            key = (await rl.question('  > ')).trim();
-            if (!key) {
-                console.error('  A chave não pode ser vazia.');
-                continue;
-            }
-            if (!KEY_RE.test(key)) {
-                console.error("  Use só letras, números, '-' ou '_'.");
-                continue;
-            }
-            if (findProfile(profiles, key)) {
-                console.error(`  Já existe um perfil com a chave '${key}'.`);
+            label = (await rl.question('  > ')).trim();
+            if (!label) {
+                console.error('  O nome não pode ser vazio.');
                 continue;
             }
             break;
         }
+        const baseSlug = slugify(label);
+        key = uniqueKey(baseSlug, profiles);
         console.log('');
 
         console.log(BOLD + 'Emoji' + RESET);
-        console.log(DIM + '  Aparece ao lado do rótulo no seletor, quando você tem 2 ou mais perfis.' + RESET);
+        console.log(DIM + '  Aparece ao lado do nome no seletor, quando você tem 2 ou mais perfis.' + RESET);
         emoji = (await rl.question(`  [${DEFAULT_EMOJI}] > `)).trim() || DEFAULT_EMOJI;
-        console.log('');
-
-        console.log(BOLD + 'Rótulo' + RESET);
-        console.log(DIM + '  Nome legível mostrado no seletor e no "claude-profile list".' + RESET);
-        label = (await rl.question(`  [${key}] > `)).trim() || key;
         console.log('');
 
         console.log(DIM + 'Assim vai aparecer no seletor:' + RESET);
         console.log(`  ${emoji}  ${label}`);
         console.log('');
+        if (key !== baseSlug) {
+            console.log(DIM + `Já existe um perfil com a chave "${baseSlug}" — esta vai usar "${key}".` + RESET);
+            console.log('');
+        }
 
         console.log(BOLD + 'Resumo' + RESET);
+        console.log(`  nome:       ${label}`);
         console.log(`  chave:      ${key}`);
-        console.log(`  rótulo:     ${label}`);
         console.log(`  emoji:      ${emoji}`);
         console.log(`  config_dir: ${accountDir(key)}`);
         console.log('');
@@ -300,7 +312,7 @@ async function cmdAdd(argv) {
     fs.mkdirSync(dir, { recursive: true });
     profiles.push({ key, label, emoji });
     saveProfiles(profiles);
-    console.log(`Perfil '${key}' adicionado (${dir}).`);
+    console.log(`Perfil '${label}' adicionado (chave: ${key}, ${dir}).`);
 
     await promptAuth(dir);
 }
@@ -571,7 +583,7 @@ async function main() {
             await cmdUpdate();
             break;
         default:
-            console.error('uso: claude-profile add [chave] [emoji] [rótulo]');
+            console.error('uso: claude-profile add [nome] [emoji]');
             console.error('     claude-profile list');
             console.error('     claude-profile remove <chave>');
             console.error('     claude-profile update');
