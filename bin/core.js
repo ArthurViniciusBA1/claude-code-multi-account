@@ -13,6 +13,19 @@ const KEY_RE = /^[a-zA-Z0-9_-]+$/;
 const DEFAULT_EMOJI = '👤';
 const REPO_URL = 'https://github.com/ArthurViniciusBA1/claude-code-multi-account.git';
 
+const ORANGE = '\x1b[38;2;255;107;53m';
+const RESET = '\x1b[0m';
+const BOLD = '\x1b[1m';
+const DIM = '\x1b[2m';
+
+// banner: log = console.log (stdout) ou console.error (stderr, usado em
+// telas cujo stdout é capturado por command substitution, como o select).
+function banner(log = console.log) {
+    log(ORANGE + '   ▐▛███▜▌' + RESET);
+    log(ORANGE + '  ▝▜█████▛▘' + RESET);
+    log(ORANGE + '    ▘▘ ▝▝' + RESET);
+}
+
 function loadProfiles() {
     try {
         const raw = fs.readFileSync(PROFILES_FILE, 'utf8');
@@ -122,12 +135,7 @@ async function cmdSelect() {
     let chosenKey = null;
 
     if (hasFzf()) {
-        const ORANGE = '\x1b[38;2;255;107;53m';
-        const RESET = '\x1b[0m';
-        const BOLD = '\x1b[1m';
-        console.error(ORANGE + '   ▐▛███▜▌' + RESET);
-        console.error(ORANGE + '  ▝▜█████▛▘' + RESET);
-        console.error(ORANGE + '    ▘▘ ▝▝' + RESET);
+        banner(console.error);
         console.error(BOLD + 'Escolha o perfil:' + RESET);
 
         const menu = profiles.map((p) => `${p.emoji}  ${p.label}`).join('\n');
@@ -224,13 +232,21 @@ async function cmdAdd(argv) {
             process.exit(1);
         }
 
-        console.log('Vamos configurar um novo perfil. (Ctrl+C cancela a qualquer momento.)');
+        banner();
+        console.log(BOLD + 'Novo perfil' + RESET + DIM + '  (Ctrl+C cancela a qualquer momento)' + RESET);
+        console.log('');
+        console.log(DIM + 'Cada conta fica isolada numa pasta própria — login, histórico e' + RESET);
+        console.log(DIM + 'configurações não se misturam entre perfis.' + RESET);
         console.log('');
 
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
+        console.log(BOLD + 'Chave' + RESET);
+        console.log(DIM + '  Identificador curto. Vira o nome da pasta em ~/.claude-accounts/<chave>' + RESET);
+        console.log(DIM + '  e funciona com "CLAUDE_PROFILE=<chave> claude" pra pular o seletor' + RESET);
+        console.log(DIM + '  direto pra essa conta.' + RESET);
         while (true) {
-            key = (await rl.question('Chave (identificador curto, ex: work): ')).trim();
+            key = (await rl.question('  > ')).trim();
             if (!key) {
                 console.error('  A chave não pode ser vazia.');
                 continue;
@@ -245,12 +261,23 @@ async function cmdAdd(argv) {
             }
             break;
         }
-
-        emoji = (await rl.question(`Emoji [${DEFAULT_EMOJI}]: `)).trim() || DEFAULT_EMOJI;
-        label = (await rl.question(`Rótulo [${key}]: `)).trim() || key;
-
         console.log('');
-        console.log('Resumo:');
+
+        console.log(BOLD + 'Emoji' + RESET);
+        console.log(DIM + '  Aparece ao lado do rótulo no seletor, quando você tem 2 ou mais perfis.' + RESET);
+        emoji = (await rl.question(`  [${DEFAULT_EMOJI}] > `)).trim() || DEFAULT_EMOJI;
+        console.log('');
+
+        console.log(BOLD + 'Rótulo' + RESET);
+        console.log(DIM + '  Nome legível mostrado no seletor e no "claude-profile list".' + RESET);
+        label = (await rl.question(`  [${key}] > `)).trim() || key;
+        console.log('');
+
+        console.log(DIM + 'Assim vai aparecer no seletor:' + RESET);
+        console.log(`  ${emoji}  ${label}`);
+        console.log('');
+
+        console.log(BOLD + 'Resumo' + RESET);
         console.log(`  chave:      ${key}`);
         console.log(`  rótulo:     ${label}`);
         console.log(`  emoji:      ${emoji}`);

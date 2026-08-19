@@ -137,19 +137,39 @@ pra um menu numerado simples.
 ## Configurando seus perfis
 
 Rode `claude-profile add` (sem argumentos) e siga o passo a passo — ele
-pergunta chave, emoji e rótulo, mostra um resumo pra confirmar (com o
-`config_dir` já derivado automaticamente), e no final já oferece autenticar
-a conta na hora:
+explica o que cada campo (chave, emoji, rótulo) representa, mostra uma
+prévia de como a conta vai aparecer no seletor, um resumo pra confirmar
+(com o `config_dir` já derivado automaticamente), e no final já oferece
+autenticar a conta na hora:
 
 ```
 $ claude-profile add
-Vamos configurar um novo perfil. (Ctrl+C cancela a qualquer momento.)
+   ▐▛███▜▌
+  ▝▜█████▛▘
+    ▘▘ ▝▝
+Novo perfil  (Ctrl+C cancela a qualquer momento)
 
-Chave (identificador curto, ex: work): work
-Emoji [👤]: 💼
-Rótulo [work]: Trabalho
+Cada conta fica isolada numa pasta própria — login, histórico e
+configurações não se misturam entre perfis.
 
-Resumo:
+Chave
+  Identificador curto. Vira o nome da pasta em ~/.claude-accounts/<chave>
+  e funciona com "CLAUDE_PROFILE=<chave> claude" pra pular o seletor
+  direto pra essa conta.
+  > work
+
+Emoji
+  Aparece ao lado do rótulo no seletor, quando você tem 2 ou mais perfis.
+  [👤] > 💼
+
+Rótulo
+  Nome legível mostrado no seletor e no "claude-profile list".
+  [work] > Trabalho
+
+Assim vai aparecer no seletor:
+  💼  Trabalho
+
+Resumo
   chave:      work
   rótulo:     Trabalho
   emoji:      💼
