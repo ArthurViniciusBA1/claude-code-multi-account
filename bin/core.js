@@ -238,6 +238,120 @@ async function cmdAdd(argv) {
     await promptAuth(dir);
 }
 
+// --- uninstall: remove o núcleo (npm) e a integração de cada shell. ---
+// Não depende de ter o repositório clonado por perto — só precisa do
+// claude-switcher-core já estar no PATH, que é exatamente quando faz
+// sentido rodar isso.
+
+function npmUninstall(pkg) {
+    spawnSync('npm', ['uninstall', '-g', pkg], { stdio: 'ignore' });
+    const userPrefix = path.join(os.homedir(), '.npm-global');
+    if (fs.existsSync(userPrefix)) {
+        spawnSync('npm', ['uninstall', '-g', '--prefix', userPrefix, pkg], { stdio: 'ignore' });
+    }
+}
+
+function removeLineContaining(filePath, substring) {
+    if (!fs.existsSync(filePath)) return false;
+    const content = fs.readFileSync(filePath, 'utf8');
+    const lines = content.split('\n');
+    const kept = lines.filter((l) => !l.includes(substring));
+    if (kept.length === lines.length) return false;
+    fs.writeFileSync(filePath, kept.join('\n'));
+    return true;
+}
+
+function powerShellProfileCandidates() {
+    const candidates = new Set();
+    const docs = path.join(os.homedir(), 'Documents');
+    candidates.add(path.join(docs, 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1'));
+    candidates.add(path.join(docs, 'PowerShell', 'Microsoft.PowerShell_profile.ps1'));
+    if (process.platform === 'win32') {
+        for (const exe of ['pwsh', 'powershell']) {
+            const res = spawnSync(exe, ['-NoProfile', '-Command', '$PROFILE'], { encoding: 'utf8' });
+            if (!res.error && res.status === 0) {
+                const p = (res.stdout || '').trim();
+                if (p) candidates.add(p);
+            }
+        }
+    }
+    return [...candidates];
+}
+
+async function cmdUninstall() {
+    npmUninstall('claude-switcher-core');
+    console.log('núcleo (claude-switcher-core) removido do npm (se estava instalado).');
+
+    const removedFrom = [];
+
+    const fishFiles = [
+        path.join(os.homedir(), '.config', 'fish', 'functions', 'claude.fish'),
+        path.join(os.homedir(), '.config', 'fish', 'functions', 'claude-profile.fish'),
+        path.join(os.homedir(), '.config', 'fish', 'conf.d', 'claude-switcher.fish'),
+    ];
+    let removedFish = false;
+    for (const f of fishFiles) {
+        if (fs.existsSync(f)) {
+            fs.rmSync(f);
+            removedFish = true;
+        }
+    }
+    if (removedFish) removedFrom.push('fish');
+
+    if (removeLineContaining(path.join(os.homedir(), '.bashrc'), 'claude-switcher.sh')) {
+        removedFrom.push('bash');
+    }
+    if (removeLineContaining(path.join(os.homedir(), '.zshrc'), 'claude-switcher.sh')) {
+        removedFrom.push('zsh');
+    }
+    let removedPs = false;
+    for (const p of powerShellProfileCandidates()) {
+        if (removeLineContaining(p, 'claude-switcher.ps1')) removedPs = true;
+    }
+    if (removedPs) removedFrom.push('PowerShell');
+
+    console.log('');
+    if (removedFrom.length > 0) {
+        console.log(`Wrapper removido de: ${removedFrom.join(', ')}`);
+    } else {
+        console.log('Nenhum wrapper de shell encontrado pra remover.');
+    }
+    console.log('(a linha de PATH pro ~/.npm-global/bin, se foi adicionada durante a');
+    console.log('instalação, não foi removida — fica inofensiva sem o pacote instalado,');
+    console.log('mas você pode tirá-la manualmente do seu arquivo de config se quiser)');
+    console.log('');
+
+    if (process.stdin.isTTY) {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+        const wipeAccounts = (await rl.question(
+            'Apagar também as contas salvas em ~/.claude-accounts (login, histórico, credenciais)? [s/N] '
+        )).trim().toLowerCase();
+        if (wipeAccounts === 's' || wipeAccounts === 'sim' || wipeAccounts === 'y' || wipeAccounts === 'yes') {
+            fs.rmSync(ROOT, { recursive: true, force: true });
+            console.log('~/.claude-accounts removido.');
+        } else {
+            console.log('~/.claude-accounts mantido.');
+        }
+
+        const wipeClaude = (await rl.question(
+            'Desinstalar também o Claude Code (@anthropic-ai/claude-code)? [s/N] '
+        )).trim().toLowerCase();
+        rl.close();
+        if (wipeClaude === 's' || wipeClaude === 'sim' || wipeClaude === 'y' || wipeClaude === 'yes') {
+            npmUninstall('@anthropic-ai/claude-code');
+            console.log('Claude Code desinstalado.');
+        } else {
+            console.log('Claude Code mantido.');
+        }
+    } else {
+        console.log('(terminal não interativo — pulei as perguntas sobre apagar contas/Claude Code)');
+    }
+
+    console.log('');
+    console.log('Pronto. Abra um terminal novo pra confirmar.');
+}
+
 async function main() {
     const [cmd, ...rest] = process.argv.slice(2);
 
@@ -256,11 +370,15 @@ async function main() {
         case 'rm':
             cmdRemove(rest);
             break;
+        case 'uninstall':
+            await cmdUninstall();
+            break;
         default:
             console.error('uso: claude-switcher-core select');
             console.error('     claude-switcher-core add [chave] [emoji] [rótulo]');
             console.error('     claude-switcher-core list');
             console.error('     claude-switcher-core remove <chave>');
+            console.error('     claude-switcher-core uninstall');
             process.exit(1);
     }
 }

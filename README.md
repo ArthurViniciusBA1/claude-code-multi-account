@@ -45,8 +45,13 @@ de fingir que deu certo).
 ```powershell
 git clone https://github.com/ArthurViniciusBA1/claude-code-multi-account.git
 cd claude-code-multi-account
-.\install.ps1
+. .\install.ps1
 ```
+
+Repare no `. ` antes do caminho — isso roda o script "dot-sourced", o que
+carrega o comando `claude` direto nessa mesma sessão (sem precisar abrir um
+terminal novo depois). Rodar só `.\install.ps1`, sem o ponto, também
+funciona, mas aí você precisa abrir uma sessão nova pra usar o `claude`.
 
 > O wrapper e o instalador do PowerShell foram escritos e revisados com
 > cuidado (inclusive o detalhe de resolver o binário real do `claude` via
@@ -173,11 +178,13 @@ CLAUDE_PROFILE=work claude   # pula o seletor, usa o perfil "work" direto
 claude-profile list
 claude-profile add <chave> [emoji] [rótulo]
 claude-profile remove <chave>
+claude-profile uninstall
 ```
 
 `remove` só apaga o registro do perfil, não a pasta em `~/.claude-accounts/`
 — se quiser apagar os dados da conta também, faça isso manualmente
-(`rm -rf ~/.claude-accounts/<chave>`).
+(`rm -rf ~/.claude-accounts/<chave>`). `uninstall` é outra coisa — remove o
+claude-switcher inteiro (veja a seção [Desinstalando](#desinstalando)).
 
 ## Como funciona
 
@@ -202,10 +209,27 @@ claude-profile remove <chave>
 
 ## Desinstalando
 
+O jeito mais simples, direto de qualquer shell (não precisa ter o repositório
+clonado por perto — só precisa do `claude-switcher-core` ainda estar no
+PATH):
+
 ```sh
-npm uninstall -g claude-switcher-core
+claude-profile uninstall
 ```
 
-E remova o wrapper do seu shell (o `fisher remove`, o `source` do
-`.bashrc`/`.zshrc`, ou a linha no `$PROFILE`, conforme o caso). Os perfis
-salvos em `~/.claude-accounts/profiles.json` não são apagados.
+Remove o pacote do npm e a integração de todos os shells (fish, bash, zsh e
+PowerShell — detecta e limpa o que encontrar, independente de qual você
+está usando agora). Por padrão **não apaga suas contas** salvas em
+`~/.claude-accounts` nem desinstala o Claude Code em si — pergunta `[s/N]`
+separadamente pra cada um desses dois, sempre com padrão "não".
+
+Alternativa, se preferir rodar a partir do clone do repositório:
+
+```sh
+./uninstall.sh        # Linux/macOS (fish, bash, zsh)
+.\uninstall.ps1        # Windows (PowerShell)
+```
+
+Fazem exatamente a mesma coisa que `claude-profile uninstall` — a diferença
+é só não depender do pacote já estar instalado (útil se a instalação ficou
+pela metade).
