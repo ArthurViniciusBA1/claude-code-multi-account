@@ -178,13 +178,23 @@ CLAUDE_PROFILE=work claude   # pula o seletor, usa o perfil "work" direto
 claude-profile list
 claude-profile add <chave> [emoji] [rótulo]
 claude-profile remove <chave>
+claude-profile update
 claude-profile uninstall
 ```
 
 `remove` só apaga o registro do perfil, não a pasta em `~/.claude-accounts/`
 — se quiser apagar os dados da conta também, faça isso manualmente
-(`rm -rf ~/.claude-accounts/<chave>`). `uninstall` é outra coisa — remove o
-claude-switcher inteiro (veja a seção [Desinstalando](#desinstalando)).
+(`rm -rf ~/.claude-accounts/<chave>`).
+
+`update` puxa a versão mais nova do repositório e reinstala — sem precisar
+rodar `git clone`/`git pull` na mão. Ele acha sozinho onde está o clone
+original (`npm install -g <path-local>` normalmente deixa um symlink de
+volta pra ele) e roda `git pull` + reinstala por ali; se não achar nenhum
+clone associado à instalação atual, clona um novo em
+`~/.claude-code-multi-account` e passa a usar esse dali em diante.
+
+`uninstall` é outra coisa — remove o claude-switcher inteiro (veja a seção
+[Desinstalando](#desinstalando)).
 
 ## Como funciona
 

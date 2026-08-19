@@ -11,6 +11,7 @@ const ROOT = path.join(os.homedir(), '.claude-accounts');
 const PROFILES_FILE = path.join(ROOT, 'profiles.json');
 const KEY_RE = /^[a-zA-Z0-9_-]+$/;
 const DEFAULT_EMOJI = '👤';
+const REPO_URL = 'https://github.com/ArthurViniciusBA1/claude-code-multi-account.git';
 
 function loadProfiles() {
     try {
@@ -352,6 +353,72 @@ async function cmdUninstall() {
     console.log('Pronto. Abra um terminal novo pra confirmar.');
 }
 
+// --- update: puxa a versão mais nova do repositório e reinstala. ---
+// Não depende do usuário saber onde clonou o repo nem de rodar git/npm
+// na mão: `npm install -g <path-local>` normalmente deixa um symlink de
+// volta pro clone original, então achamos o clone a partir do próprio
+// arquivo em execução. Se não achar nenhum (instalação não é um symlink
+// pra um clone git), clona um novo em ~/.claude-code-multi-account.
+
+function findRepoRoot() {
+    try {
+        const real = fs.realpathSync(__filename); // .../bin/core.js, já resolvido
+        const root = path.dirname(path.dirname(real));
+        if (fs.existsSync(path.join(root, '.git'))) {
+            return root;
+        }
+    } catch (_) {
+        // segue pro fallback
+    }
+    return null;
+}
+
+function npmInstallLocal(target) {
+    const res = spawnSync('npm', ['install', '-g', target], { stdio: 'inherit' });
+    if (res.status === 0) return true;
+    const userPrefix = path.join(os.homedir(), '.npm-global');
+    if (fs.existsSync(userPrefix)) {
+        const res2 = spawnSync('npm', ['install', '-g', '--prefix', userPrefix, target], { stdio: 'inherit' });
+        return res2.status === 0;
+    }
+    return false;
+}
+
+async function cmdUpdate() {
+    let repoRoot = findRepoRoot();
+
+    if (!repoRoot) {
+        const fallback = path.join(os.homedir(), '.claude-code-multi-account');
+        if (fs.existsSync(path.join(fallback, '.git'))) {
+            repoRoot = fallback;
+        } else {
+            console.log(`Nenhum clone git encontrado pra essa instalação — clonando em ${fallback}...`);
+            const clone = spawnSync('git', ['clone', REPO_URL, fallback], { stdio: 'inherit' });
+            if (clone.status !== 0) {
+                console.error('claude-profile: falha ao clonar o repositório.');
+                process.exit(1);
+            }
+            repoRoot = fallback;
+        }
+    }
+
+    console.log(`Atualizando a partir de ${repoRoot}...`);
+    const pull = spawnSync('git', ['-C', repoRoot, 'pull', '--ff-only'], { stdio: 'inherit' });
+    if (pull.status !== 0) {
+        console.error('claude-profile: git pull falhou — resolva manualmente em ' + repoRoot + ' e rode "claude-profile update" de novo.');
+        process.exit(1);
+    }
+
+    console.log('Reinstalando o núcleo...');
+    if (!npmInstallLocal(repoRoot)) {
+        console.error('claude-profile: falha ao reinstalar via npm.');
+        process.exit(1);
+    }
+
+    console.log('');
+    console.log('Atualizado.');
+}
+
 async function main() {
     const [cmd, ...rest] = process.argv.slice(2);
 
@@ -373,10 +440,14 @@ async function main() {
         case 'uninstall':
             await cmdUninstall();
             break;
+        case 'update':
+            await cmdUpdate();
+            break;
         default:
             console.error('uso: claude-profile add [chave] [emoji] [rótulo]');
             console.error('     claude-profile list');
             console.error('     claude-profile remove <chave>');
+            console.error('     claude-profile update');
             console.error('     claude-profile uninstall');
             process.exit(1);
     }
