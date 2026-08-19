@@ -33,6 +33,13 @@ não esbarra em travas de segurança tipo `allow-git=none`), e cai sozinho
 num prefixo de usuário (`~/.npm-global`) se o prefixo global do npm não for
 gravável sem `sudo`. Rodar de novo não duplica nada — é seguro repetir.
 
+Se o Claude Code (comando `claude`) ainda não estiver instalado, o script
+pergunta (S/N) antes de instalar via `npm install -g @anthropic-ai/claude-code`
+— nunca instala sem confirmação. Depois de instalar, confirma de verdade
+rodando `claude --version` (o pacote tem um postinstall que baixa o binário
+nativo da plataforma; se isso falhar silenciosamente, o script avisa em vez
+de fingir que deu certo).
+
 **Windows (PowerShell) — um passo só:**
 
 ```powershell

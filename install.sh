@@ -11,8 +11,11 @@
 # sem precisar escolher/copiar nada na mão. Roda quantas vezes quiser: só
 # adiciona o que ainda não está lá (idempotente).
 #
-# Instala a partir do próprio clone local (npm install -g .), então não
-# depende do npm buscar nada via git — evita travas tipo "allow-git=none"
+# Se o Claude Code (`claude`) ainda não estiver instalado, pergunta (S/N)
+# antes de instalar via npm — nunca instala sem confirmação.
+#
+# Instala o núcleo a partir do próprio clone local (npm install -g .), então
+# não depende do npm buscar nada via git — evita travas tipo "allow-git=none"
 # que alguns sistemas têm por segurança.
 
 set -e
@@ -32,22 +35,85 @@ if ! command -v npm >/dev/null 2>&1; then
     exit 1
 fi
 
+NPM_PREFIX=""
+
+# npm_install_global <alvo>
+# Instala <alvo> globalmente; se o prefixo padrão do npm não for gravável,
+# cai pra um prefixo de usuário (~/.npm-global) e reaproveita esse mesmo
+# prefixo nas chamadas seguintes. Cada comando arriscado é sempre a
+# condição direta de um "if", pra nunca disparar o "set -e" de forma
+# inconsistente entre shells diferentes (dash/bash/ash).
+npm_install_global() {
+    target="$1"
+    if [ -n "$NPM_PREFIX" ]; then
+        if npm install -g --prefix "$NPM_PREFIX" "$target" >/tmp/claude-switcher-install.log 2>&1; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+    if npm install -g "$target" >/tmp/claude-switcher-install.log 2>&1; then
+        return 0
+    fi
+    warn "instalação global padrão falhou (provavelmente sem permissão em $(npm config get prefix)); usando prefixo de usuário..."
+    NPM_PREFIX="$HOME/.npm-global"
+    mkdir -p "$NPM_PREFIX"
+    if npm install -g --prefix "$NPM_PREFIX" "$target" >/tmp/claude-switcher-install.log 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# --- 0. Claude Code em si (opcional, pergunta antes) ---
+
+if ! command -v claude >/dev/null 2>&1; then
+    if [ -t 0 ]; then
+        printf 'Claude Code (comando "claude") não encontrado. Instalar agora via npm? [s/N] '
+        read -r ANSWER
+        case "$ANSWER" in
+            [sSyY]*)
+                info "Instalando @anthropic-ai/claude-code..."
+                if npm_install_global "@anthropic-ai/claude-code"; then
+                    CLAUDE_BIN="claude"
+                    if [ -n "$NPM_PREFIX" ]; then
+                        CLAUDE_BIN="$NPM_PREFIX/bin/claude"
+                    fi
+                    if "$CLAUDE_BIN" --version >/dev/null 2>&1; then
+                        info "  Claude Code instalado e funcionando."
+                    else
+                        warn "o npm instalou o pacote, mas \"claude --version\" falhou — o"
+                        warn "postinstall (que baixa o binário nativo da plataforma) pode não"
+                        warn "ter terminado. Depois de abrir um terminal novo, tente rodar"
+                        warn "\"claude --version\"; se continuar falhando, rode de novo:"
+                        warn "  npm install -g @anthropic-ai/claude-code"
+                    fi
+                else
+                    err "falha ao instalar o Claude Code. Veja /tmp/claude-switcher-install.log"
+                    exit 1
+                fi
+                ;;
+            *)
+                warn "Claude Code não instalado. O wrapper vai funcionar assim que você instalar (veja: https://docs.claude.com/claude-code)."
+                ;;
+        esac
+    else
+        warn "Claude Code (comando \"claude\") não encontrado, e este terminal não é interativo pra perguntar. Pulei a instalação — rode ./install.sh direto num terminal se quiser instalar."
+    fi
+fi
+
 # --- 1. Instala o núcleo (claude-switcher-core) ---
 
 info "Instalando claude-switcher-core..."
-
-NPM_PREFIX=""
-if npm install -g "$SCRIPT_DIR" >/tmp/claude-switcher-install.log 2>&1; then
-    info "  núcleo instalado no prefixo global padrão do npm."
-else
-    warn "instalação global padrão falhou (provavelmente sem permissão em $(npm config get prefix)); tentando prefixo de usuário..."
-    NPM_PREFIX="$HOME/.npm-global"
-    mkdir -p "$NPM_PREFIX"
-    if ! npm install -g --prefix "$NPM_PREFIX" "$SCRIPT_DIR" >/tmp/claude-switcher-install.log 2>&1; then
-        err "falha ao instalar o núcleo. Veja /tmp/claude-switcher-install.log"
-        exit 1
+if npm_install_global "$SCRIPT_DIR"; then
+    if [ -n "$NPM_PREFIX" ]; then
+        info "  núcleo instalado em $NPM_PREFIX (prefixo de usuário, sem sudo)."
+    else
+        info "  núcleo instalado no prefixo global padrão do npm."
     fi
-    info "  núcleo instalado em $NPM_PREFIX (prefixo de usuário, sem sudo)."
+else
+    err "falha ao instalar o núcleo. Veja /tmp/claude-switcher-install.log"
+    exit 1
 fi
 
 # --- 2. Detecta shells presentes e configura cada um ---
