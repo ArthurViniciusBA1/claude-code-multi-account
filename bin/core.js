@@ -1,0 +1,271 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const readline = require('node:readline/promises');
+
+const ROOT = path.join(os.homedir(), '.claude-accounts');
+const PROFILES_FILE = path.join(ROOT, 'profiles.json');
+const KEY_RE = /^[a-zA-Z0-9_-]+$/;
+const DEFAULT_EMOJI = '👤';
+
+function loadProfiles() {
+    try {
+        const raw = fs.readFileSync(PROFILES_FILE, 'utf8');
+        const data = JSON.parse(raw);
+        return Array.isArray(data) ? data : [];
+    } catch (err) {
+        if (err.code === 'ENOENT') return [];
+        throw err;
+    }
+}
+
+function saveProfiles(profiles) {
+    fs.mkdirSync(ROOT, { recursive: true });
+    fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2) + '\n');
+}
+
+function accountDir(key) {
+    return path.join(ROOT, key);
+}
+
+function findProfile(profiles, key) {
+    return profiles.find((p) => p.key === key);
+}
+
+function hasFzf() {
+    const res = spawnSync('fzf', ['--version'], { stdio: 'ignore' });
+    return !res.error && res.status === 0;
+}
+
+function formatList(profiles) {
+    if (profiles.length === 0) {
+        return "Nenhum perfil configurado. Use: claude-profile add <chave> [emoji] [rótulo]";
+    }
+    return profiles
+        .map((p) => `${p.emoji}  ${p.key}  (${p.label})  ->  ${accountDir(p.key)}`)
+        .join('\n');
+}
+
+// --- select: decide qual CLAUDE_CONFIG_DIR usar. ---
+// stdout: SÓ o path final (quando exit 0). Todo o resto (banner, menus,
+// prompts) vai pro stderr, porque os wrappers de shell capturam o stdout
+// via command substitution.
+// Exit codes: 0 = usar o path impresso; 1 = cancelado/erro (não rodar
+// claude); 2 = passthrough (nenhum perfil configurado, rodar claude puro).
+async function cmdSelect() {
+    const profiles = loadProfiles();
+
+    if (process.env.CLAUDE_PROFILE) {
+        const key = process.env.CLAUDE_PROFILE;
+        const p = findProfile(profiles, key);
+        if (!p) {
+            console.error(`claude: perfil '${key}' não encontrado (veja: claude-profile list).`);
+            process.exit(1);
+        }
+        process.stdout.write(accountDir(p.key));
+        process.exit(0);
+    }
+
+    if (profiles.length === 0) {
+        process.exit(2);
+    }
+
+    if (profiles.length === 1) {
+        process.stdout.write(accountDir(profiles[0].key));
+        process.exit(0);
+    }
+
+    let chosenKey = null;
+
+    if (hasFzf()) {
+        const ORANGE = '\x1b[38;2;255;107;53m';
+        const RESET = '\x1b[0m';
+        const BOLD = '\x1b[1m';
+        console.error(ORANGE + '   ▐▛███▜▌' + RESET);
+        console.error(ORANGE + '  ▝▜█████▛▘' + RESET);
+        console.error(ORANGE + '    ▘▘ ▝▝' + RESET);
+        console.error(BOLD + 'Escolha o perfil:' + RESET);
+
+        const menu = profiles.map((p) => `${p.emoji}  ${p.label}`).join('\n');
+        const res = spawnSync(
+            'fzf',
+            ['--height=~40%', '--layout=reverse', '--border', '--no-input',
+                '--padding=1,2', '--margin=1,2', '--pointer=➤', '--no-multi'],
+            { input: menu, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'] }
+        );
+        const pick = (res.stdout || '').trim();
+        const idx = profiles.findIndex((p) => pick.includes(p.label));
+        if (idx !== -1) chosenKey = profiles[idx].key;
+    } else {
+        console.error('Escolha o perfil:');
+        profiles.forEach((p, i) => {
+            console.error(`  ${i + 1}) ${p.emoji}  ${p.label}`);
+        });
+        const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+        const answer = (await rl.question('> ')).trim();
+        rl.close();
+        const idx = parseInt(answer, 10);
+        if (!Number.isNaN(idx) && idx >= 1 && idx <= profiles.length) {
+            chosenKey = profiles[idx - 1].key;
+        }
+    }
+
+    if (!chosenKey) {
+        process.exit(1);
+    }
+
+    process.stdout.write(accountDir(chosenKey));
+    process.exit(0);
+}
+
+function cmdList() {
+    console.log(formatList(loadProfiles()));
+}
+
+function cmdRemove(argv) {
+    const key = argv[0];
+    if (!key) {
+        console.error('uso: claude-profile remove <chave>');
+        process.exit(1);
+    }
+    const profiles = loadProfiles();
+    const next = profiles.filter((p) => p.key !== key);
+    if (next.length === profiles.length) {
+        console.error(`claude-profile: perfil '${key}' não encontrado.`);
+        process.exit(1);
+    }
+    saveProfiles(next);
+    console.log(`Perfil '${key}' removido.`);
+}
+
+async function promptAuth(dir) {
+    if (!process.stdin.isTTY) {
+        console.log(`Autentique quando quiser com:  CLAUDE_CONFIG_DIR=${dir} claude`);
+        return;
+    }
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const answer = (await rl.question('Autenticar essa conta agora (abre o claude)? [Y/n] ')).trim().toLowerCase();
+    rl.close();
+    const yes = answer === '' || answer === 'y' || answer === 'yes' || answer === 's' || answer === 'sim';
+    if (yes) {
+        spawnSync('claude', [], {
+            stdio: 'inherit',
+            env: { ...process.env, CLAUDE_CONFIG_DIR: dir },
+        });
+    } else {
+        console.log('');
+        console.log(`Autentique quando quiser com:  CLAUDE_CONFIG_DIR=${dir} claude`);
+    }
+}
+
+async function cmdAdd(argv) {
+    const profiles = loadProfiles();
+    let key, emoji, label;
+
+    if (argv.length >= 1) {
+        // Modo direto (scriptável): claude-profile add <chave> [emoji] [rótulo]
+        key = argv[0];
+        emoji = argv[1] || DEFAULT_EMOJI;
+        label = argv.length >= 3 ? argv.slice(2).join(' ') : key;
+
+        if (!KEY_RE.test(key)) {
+            console.error("claude-profile: chave inválida (use só letras, números, '-' ou '_').");
+            process.exit(1);
+        }
+        if (findProfile(profiles, key)) {
+            console.error(`claude-profile: perfil '${key}' já existe. Use 'claude-profile remove ${key}' antes de recriar.`);
+            process.exit(1);
+        }
+    } else {
+        // Modo wizard interativo.
+        if (!process.stdin.isTTY) {
+            console.error('uso: claude-profile add <chave> [emoji] [rótulo]');
+            process.exit(1);
+        }
+
+        console.log('Vamos configurar um novo perfil. (Ctrl+C cancela a qualquer momento.)');
+        console.log('');
+
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+        while (true) {
+            key = (await rl.question('Chave (identificador curto, ex: work): ')).trim();
+            if (!key) {
+                console.error('  A chave não pode ser vazia.');
+                continue;
+            }
+            if (!KEY_RE.test(key)) {
+                console.error("  Use só letras, números, '-' ou '_'.");
+                continue;
+            }
+            if (findProfile(profiles, key)) {
+                console.error(`  Já existe um perfil com a chave '${key}'.`);
+                continue;
+            }
+            break;
+        }
+
+        emoji = (await rl.question(`Emoji [${DEFAULT_EMOJI}]: `)).trim() || DEFAULT_EMOJI;
+        label = (await rl.question(`Rótulo [${key}]: `)).trim() || key;
+
+        console.log('');
+        console.log('Resumo:');
+        console.log(`  chave:      ${key}`);
+        console.log(`  rótulo:     ${label}`);
+        console.log(`  emoji:      ${emoji}`);
+        console.log(`  config_dir: ${accountDir(key)}`);
+        console.log('');
+
+        const confirm = (await rl.question('Confirmar? [Y/n] ')).trim().toLowerCase();
+        rl.close();
+        const yes = confirm === '' || confirm === 'y' || confirm === 'yes' || confirm === 's' || confirm === 'sim';
+        if (!yes) {
+            console.log('Cancelado.');
+            process.exit(1);
+        }
+    }
+
+    const dir = accountDir(key);
+    fs.mkdirSync(dir, { recursive: true });
+    profiles.push({ key, label, emoji });
+    saveProfiles(profiles);
+    console.log(`Perfil '${key}' adicionado (${dir}).`);
+
+    await promptAuth(dir);
+}
+
+async function main() {
+    const [cmd, ...rest] = process.argv.slice(2);
+
+    switch (cmd) {
+        case 'select':
+            await cmdSelect();
+            break;
+        case 'add':
+            await cmdAdd(rest);
+            break;
+        case 'list':
+        case 'ls':
+            cmdList();
+            break;
+        case 'remove':
+        case 'rm':
+            cmdRemove(rest);
+            break;
+        default:
+            console.error('uso: claude-switcher-core select');
+            console.error('     claude-switcher-core add [chave] [emoji] [rótulo]');
+            console.error('     claude-switcher-core list');
+            console.error('     claude-switcher-core remove <chave>');
+            process.exit(1);
+    }
+}
+
+main().catch((err) => {
+    console.error(err && err.message ? err.message : String(err));
+    process.exit(1);
+});

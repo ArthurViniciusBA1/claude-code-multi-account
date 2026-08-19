@@ -1,0 +1,17 @@
+{
+  "name": "claude-switcher-core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lógica compartilhada de troca de conta do Claude Code, usada pelos wrappers de fish, bash/zsh e PowerShell.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ArthurViniciusBA1/claude-code-multi-account.git"
+  },
+  "homepage": "https://github.com/ArthurViniciusBA1/claude-code-multi-account",
+  "bin": {
+    "claude-switcher-core": "bin/core.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
