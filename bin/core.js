@@ -384,8 +384,32 @@ function npmInstallLocal(target) {
     return false;
 }
 
+// checkForUpdate: dá um "git fetch" (não mexe na árvore de trabalho) e
+// compara HEAD local com o branch remoto. Retorna null se o fetch falhar
+// (ex: sem rede), { upToDate: true } se não há nada novo, ou
+// { upToDate: false, log } com os commits novos em texto pronto pra exibir.
+function checkForUpdate(repoRoot) {
+    const fetch = spawnSync('git', ['-C', repoRoot, 'fetch', '--quiet', 'origin'], { stdio: 'inherit' });
+    if (fetch.status !== 0) return null;
+
+    const branchRes = spawnSync('git', ['-C', repoRoot, 'symbolic-ref', '--short', 'HEAD'], { encoding: 'utf8' });
+    const branch = (branchRes.stdout || '').trim() || 'main';
+
+    const localRes = spawnSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+    const remoteRes = spawnSync('git', ['-C', repoRoot, 'rev-parse', `origin/${branch}`], { encoding: 'utf8' });
+    const local = (localRes.stdout || '').trim();
+    const remote = (remoteRes.stdout || '').trim();
+    if (!local || !remote) return null;
+
+    if (local === remote) return { upToDate: true };
+
+    const logRes = spawnSync('git', ['-C', repoRoot, 'log', '--oneline', `${local}..${remote}`], { encoding: 'utf8' });
+    return { upToDate: false, log: (logRes.stdout || '').trim() };
+}
+
 async function cmdUpdate() {
     let repoRoot = findRepoRoot();
+    let freshClone = false;
 
     if (!repoRoot) {
         const fallback = path.join(os.homedir(), '.claude-code-multi-account');
@@ -399,6 +423,38 @@ async function cmdUpdate() {
                 process.exit(1);
             }
             repoRoot = fallback;
+            freshClone = true;
+        }
+    }
+
+    if (!freshClone) {
+        console.log('Verificando atualizações...');
+        const status = checkForUpdate(repoRoot);
+        if (!status) {
+            console.error('claude-profile: não consegui checar atualizações (git fetch falhou — verifique sua conexão).');
+            process.exit(1);
+        }
+        if (status.upToDate) {
+            console.log('Já está na versão mais recente.');
+            return;
+        }
+
+        console.log('');
+        console.log('Novidades disponíveis:');
+        console.log(status.log);
+        console.log('');
+
+        if (process.stdin.isTTY) {
+            const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+            const answer = (await rl.question('Atualizar agora? [S/n] ')).trim().toLowerCase();
+            rl.close();
+            const yes = answer === '' || answer === 's' || answer === 'sim' || answer === 'y' || answer === 'yes';
+            if (!yes) {
+                console.log('Mantendo a versão atual.');
+                return;
+            }
+        } else {
+            console.log('(terminal não interativo — atualizando automaticamente)');
         }
     }
 
